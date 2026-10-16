@@ -9,84 +9,84 @@
   {
     "name": "F1",
     "row": 0.0,
-    "col": 1.2,
+    "col": 1.75,
     "width": 1.0,
     "id": 1
   },
   {
     "name": "F2",
     "row": 0.0,
-    "col": 2.2,
+    "col": 2.75,
     "width": 1.0,
     "id": 2
   },
   {
     "name": "F3",
     "row": 0.0,
-    "col": 3.2,
+    "col": 3.75,
     "width": 1.0,
     "id": 3
   },
   {
     "name": "F4",
     "row": 0.0,
-    "col": 4.2,
+    "col": 4.75,
     "width": 1.0,
     "id": 4
   },
   {
     "name": "F5",
     "row": 0.0,
-    "col": 5.4,
+    "col": 6.0,
     "width": 1.0,
     "id": 5
   },
   {
     "name": "F6",
     "row": 0.0,
-    "col": 6.4,
+    "col": 7.0,
     "width": 1.0,
     "id": 6
   },
   {
     "name": "F7",
     "row": 0.0,
-    "col": 7.4,
+    "col": 8.0,
     "width": 1.0,
     "id": 7
   },
   {
     "name": "F8",
     "row": 0.0,
-    "col": 8.4,
+    "col": 9.0,
     "width": 1.0,
     "id": 8
   },
   {
     "name": "F9",
     "row": 0.0,
-    "col": 9.6,
+    "col": 10.25,
     "width": 1.0,
     "id": 9
   },
   {
     "name": "F10",
     "row": 0.0,
-    "col": 10.6,
+    "col": 11.25,
     "width": 1.0,
     "id": 10
   },
   {
     "name": "F11",
     "row": 0.0,
-    "col": 11.6,
+    "col": 12.25,
     "width": 1.0,
     "id": 11
   },
   {
     "name": "F12",
     "row": 0.0,
-    "col": 12.6,
+    "col": 13.25,
     "width": 1.0,
     "id": 12
   },

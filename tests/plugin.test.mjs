@@ -85,4 +85,12 @@ const stoppedCount = packets.length;
 now += 100;
 plugin.Render();
 assert.equal(packets.length, stoppedCount, 'Stops after 3 failed frames');
+fail = false; prefixed = false; responses = [];
+globalThis.LightingMode = 'Canvas';
+device.color = x => x < 32 ? [255,0,0] : [0,0,255];
+plugin.Initialize(); now += 60; plugin.Render();
+for (const [id, rgb] of [[6,[255,0,0]], [7,[0,0,255]], [39,[255,0,0]], [40,[0,0,255]], [55,[255,0,0]], [56,[0,0,255]], [70,[255,0,0]], [71,[0,0,255]]]) {
+    assert.deepEqual(frame.slice(id*4+1,id*4+4), rgb, 'Physical midpoint regression: F6/F7, U/I, J/K, N/M');
+}
+plugin.Shutdown();
 console.log('PASS: endpoint/model guards, all 78 key mappings, auxiliary colors, packet bounds, frame pacing, both reply formats, effect restoration and failure stop.');
