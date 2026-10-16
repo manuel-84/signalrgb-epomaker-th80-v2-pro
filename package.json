@@ -1,10 +1,14 @@
 {
   "name": "signalrgb-epomaker-th80-v2-pro",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Unofficial USB and 2.4 GHz SignalRGB plugins for EPOMAKER TH80 V2 PRO with stock firmware",
   "license": "MIT",
-  "engines": {"node": ">=20"},
-  "scripts": {"test": "node tests/plugin.test.mjs && node tests/wireless.test.mjs"}
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node tests/plugin.test.mjs && node tests/recovery.test.mjs && node tests/wireless.test.mjs"
+  }
 }

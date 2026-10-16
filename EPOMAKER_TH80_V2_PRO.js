@@ -506,71 +506,110 @@ export function LedPositions() { return keys.map(key => [key[2], key[3]]); }
 
 let originalEffect = null;
 let ready = false;
+let rejected = false;
 let lastFrame = 0;
 let failures = 0;
 let completedFrames = 0;
+let nextProbe = 0;
+let retryDelay = 1000;
+let lastIdentityCheck = 0;
 
 export function Initialize() {
-    ready = false;
     originalEffect = null;
+    ready = false;
+    rejected = false;
     lastFrame = 0;
     failures = 0;
     completedFrames = 0;
-    drainResponses();
+    nextProbe = 0;
+    retryDelay = 1000;
+    lastIdentityCheck = 0;
+    diagnostic("Initialize USB recovery v1.2");
+    connectKeyboard();
+}
+
+function verifyIdentity() {
+    const info = transfer(0x10, 56);
+    const vendor = info[4] | (info[5] << 8);
+    const product = info[6] | (info[7] << 8);
+    const model = info[14] | (info[15] << 8);
+    if (vendor !== 0x0C45 || product !== 0x800B || model !== 35) {
+        rejected = true;
+        throw new Error("Device identity mismatch; USB lighting refused (model " + model + ").");
+    }
+    if (info[16] !== 0) throw new Error("Keyboard is not in USB mode (" + info[16] + ").");
+}
+
+function connectKeyboard(announce = true) {
     try {
-        const info = transfer(0x10, 56);
-        const vendor = info[4] | (info[5] << 8);
-        const productId = info[6] | (info[7] << 8);
-        const model = info[14] | (info[15] << 8);
-        // This USB PID is shared by other models: require the internal model too.
-        if (vendor !== 0x0C45 || productId !== 0x800B || model !== 35) {
-            throw new Error("Device identity mismatch; lighting control refused (model " + model + ").");
-        }
-        originalEffect = transfer(0x13, 16);
+        drainResponses();
+        verifyIdentity();
+        // Preserve the user's original effect across temporary failures.
+        if (!originalEffect) originalEffect = transfer(0x13, 16);
         ready = true;
-        console.log("TH80 V2 PRO: USB ready; model 35; 78 mapped keys plus 3 auxiliary LEDs. Volatile RGB streaming enabled.");
+        failures = 0;
+        retryDelay = 1000;
+        lastIdentityCheck = Date.now();
+        if (announce) diagnostic("USB ready; hardware identity and USB mode verified.");
     } catch (error) {
-        console.log("TH80 V2 PRO: initialization failed: " + error.message + ". Close the Epomaker browser driver, then reload this plugin.");
+        ready = false;
+        nextProbe = Date.now() + retryDelay;
+        retryDelay = Math.min(30000, retryDelay * 2);
+        diagnostic("USB waiting: " + error.message);
     }
 }
 
 export function Render() {
-    if (!ready) return;
+    if (rejected) return;
     const now = Date.now();
+    if (!ready) {
+        if (now >= nextProbe) connectKeyboard();
+        return;
+    }
+    if (now - lastIdentityCheck >= 5000) {
+        connectKeyboard(false);
+        if (!ready) return;
+    }
     const fps = Math.max(5, Math.min(30, Number(frameRate) || 20));
     if (now - lastFrame < 1000 / fps) return;
     lastFrame = now;
+    sendFrame();
+}
+
+function sendFrame() {
     try {
         transfer(0x32, 512, buildFrame());
+        if (failures) diagnostic("USB frame resumed after " + failures + " failed frame(s).");
         failures = 0;
         completedFrames++;
-        if (completedFrames === 1) console.log("TH80 V2 PRO: first RGB frame acknowledged by the keyboard.");
+        if (completedFrames === 1 || completedFrames % 1200 === 0) diagnostic("USB acknowledged frames=" + completedFrames);
     } catch (error) {
         failures++;
-        if (failures === 1) console.log("TH80 V2 PRO: RGB transfer failed: " + error.message);
+        if (failures === 1) diagnostic("USB RGB transfer failed: " + error.message);
         drainResponses();
         if (failures >= 3) {
             ready = false;
-            restoreEffect();
-            console.log("TH80 V2 PRO: streaming stopped after 3 consecutive failures. Reconnect USB or reload the plugin.");
+            nextProbe = Date.now() + 1000;
+            retryDelay = 1000;
+            // Do not restore native lighting during a transient transport failure.
+            diagnostic("USB streaming paused; recovery in 1 second.");
         }
     }
 }
 
 export function Shutdown() {
     ready = false;
-    restoreEffect();
-}
-
-function restoreEffect() {
-    if (!originalEffect) return;
+    diagnostic("Shutdown requested; frames=" + completedFrames + "; failures=" + failures);
+    if (!originalEffect || rejected) return;
     try {
         drainResponses();
+        // Do not affect the other transport after a connection-mode change.
+        verifyIdentity();
         transfer(0x23, 16, originalEffect);
-        console.log("TH80 V2 PRO: original hardware lighting restored.");
         originalEffect = null;
+        diagnostic("Original hardware lighting restored on USB shutdown.");
     } catch (error) {
-        console.log("TH80 V2 PRO: could not restore hardware lighting: " + error.message);
+        diagnostic("USB restore skipped/failed: " + error.message);
     }
 }
 
@@ -618,27 +657,40 @@ function transfer(command, size, data) {
             for (let index = 0; index < count; index++) packet[9 + index] = data[address + index];
         }
         device.write(packet, 65);
-        const reply = waitForResponse(command, address);
+        const reply = waitForResponse(command, address, data ? 8 : 8 + count);
         for (let index = 0; index < count; index++) result.push(reply[8 + index]);
     }
     return result;
 }
 
-function waitForResponse(command, address) {
-    // Bounded reads prevent an absent/busy keyboard from hanging the RGB engine.
+function waitForResponse(command, address, minimumSize) {
+    let received = 0;
+    let header = [];
     for (let attempt = 0; attempt < 4; attempt++) {
-        const input = device.read([], 64, 30);
-        if (device.getLastReadSize() < 8) continue;
-        // Accept either unnumbered HID data or an explicit leading report ID.
-        const reply = input[0] === 0 && input[1] === 0x55 ? input.slice(1) : input;
+        // Reserve the report-ID byte on Windows, as on the receiver transport.
+        const input = device.read([], 65, 30);
+        const length = device.getLastReadSize();
+        const prefix = input[0] === 0 && input[1] === 0x55 ? 1 : 0;
+        const reply = prefix ? input.slice(1) : input;
+        if (length > 0) {
+            received = length;
+            header = reply.slice(0, 8);
+        }
+        if (Math.min(length - prefix, reply.length) < minimumSize) continue;
         if (reply[0] === 0x55 && reply[1] === command && (reply[3] | (reply[4] << 8)) === address) return reply;
     }
-    throw new Error("No matching reply for command 0x" + command.toString(16) + " at " + address);
+    throw new Error("No matching reply for 0x" + command.toString(16) + " at " + address + "; last bytes=" + received + "; header=" + JSON.stringify(header));
 }
 
 function drainResponses() {
     for (let attempt = 0; attempt < 20; attempt++) {
-        device.read([], 64, 0);
+        device.read([], 65, 0);
         if (device.getLastReadSize() === 0) break;
     }
+}
+
+function diagnostic(message) {
+    const line = "TH80-DIAG-USB " + Date.now() + " " + message;
+    if (typeof device.log === "function") device.log(line, {toFile: true});
+    else console.log(line);
 }

@@ -127,3 +127,22 @@ for (const [id, rgb565] of [[6,[0xf8,0]], [7,[0,0x1f]], [39,[0xf8,0]], [40,[0,0x
 }
 zones.run('Shutdown');
 console.log('PASS: wireless packet fixtures, RGB565 for all 78 keys, identity guards, frame pacing, stale/prefixed/truncated replies, partial-frame failure, sleep/wake backoff and original-effect restoration.');
+
+// Long periods in USB mode must not grow receiver-switch latency to 30 seconds.
+const longUsb = harness(); longUsb.offline = true; longUsb.run('Initialize');
+let probes = 1;
+for (let i = 0; i < 20; i++) {
+    const beforeProbe = longUsb.packets.length;
+    longUsb.now += 2999; longUsb.run('Render');
+    assert.equal(longUsb.packets.length, beforeProbe, 'No probing before the 3-second interval');
+    longUsb.now += 1; longUsb.run('Render'); probes++;
+    assert.equal(longUsb.packets.length, probes, 'Still probes once every 3 seconds after prolonged absence');
+}
+assert.ok(longUsb.packets.every(p => p[2] === 0x10), 'No lighting writes while the receiver cannot identify the keyboard');
+longUsb.now += 1; longUsb.offline = false;
+longUsb.now += 2998; longUsb.run('Render');
+assert.ok(longUsb.packets.every(p => p[2] === 0x10), 'Wait until scheduled probe');
+longUsb.now += 1; longUsb.run('Render'); longUsb.frame();
+assert.equal(longUsb.packets.filter(p => p[2] === 0x35).length, 6, 'Wireless streaming resumes within next 3-second probe plus frame');
+longUsb.run('Shutdown'); assert.deepEqual(longUsb.effect, original);
+console.log('PASS: long USB/inactive-receiver wait remains capped at 3 seconds, query pacing and guarded resume.');

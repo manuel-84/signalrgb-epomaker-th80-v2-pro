@@ -135,8 +135,10 @@ let nextProbe = 0;
 let retryDelay = 3000;
 let lastIdentityCheck = 0;
 let completedFrames = 0;
+let announceMode = -1;
 
 export function Initialize() {
+	diagnostic("Initialize wireless recovery v1.2; retry interval 3 seconds");
 	originalEffect = null;
 	ready = false;
 	rejected = false;
@@ -160,6 +162,7 @@ function verifyIdentity() {
 		throw new Error("Receiver identity mismatch; expected TH80 V2 PRO model 35 in 2.4 GHz mode.");
 	}
 
+	if (announceMode !== info[16]) { diagnostic("Receiver workMode=" + info[16]); announceMode = info[16]; }
 	if (info[16] !== 2) {throw new Error("Keyboard is not in 2.4 GHz mode.");}
 }
 
@@ -176,12 +179,14 @@ function connectKeyboard(announce = true) {
 		retryDelay = 3000;
 		lastIdentityCheck = Date.now();
 
-		if (announce) {console.log("TH80 V2 PRO 2.4 GHz: ready; 78 keys, RGB565, default 5 FPS.");}
+		if (announce) {diagnostic("TH80 V2 PRO 2.4 GHz: ready; 78 keys, RGB565, default 5 FPS.");}
 	} catch (error) {
 		ready = false;
 		nextProbe = Date.now() + retryDelay;
-		retryDelay = Math.min(30000, retryDelay * 2);
-		console.log("TH80 V2 PRO 2.4 GHz: waiting for keyboard: " + error.message);
+		// A connected receiver can outlive USB/Bluetooth mode for hours.
+		// Cap probes at 3 seconds so switching to it does not wait 30 seconds.
+		retryDelay = Math.min(3000, retryDelay * 2);
+		diagnostic("TH80 V2 PRO 2.4 GHz: waiting for keyboard: " + error.message);
 	}
 }
 
@@ -213,8 +218,9 @@ export function Render() {
 		sendMusicFrame(buildFrame());
 		failures = 0;
 		completedFrames++;
+		if (completedFrames % 1200 === 0) {diagnostic("RGB progress; acknowledged frames=" + completedFrames);}
 
-		if (completedFrames === 1) {console.log("TH80 V2 PRO 2.4 GHz: first RGB565 frame acknowledged.");}
+		if (completedFrames === 1) {diagnostic("TH80 V2 PRO 2.4 GHz: first RGB565 frame acknowledged.");}
 	} catch (error) {
 		failures++;
 		drainResponses();
@@ -223,12 +229,13 @@ export function Render() {
 			ready = false;
 			nextProbe = Date.now() + 3000;
 			retryDelay = 3000;
-			console.log("TH80 V2 PRO 2.4 GHz: streaming paused; checking for wake/reconnection in 3 seconds.");
+			diagnostic("TH80 V2 PRO 2.4 GHz: streaming paused; checking for wake/reconnection in 3 seconds.");
 		}
 	}
 }
 
 export function Shutdown() {
+	diagnostic("Shutdown requested; frames=" + completedFrames + "; failures=" + failures);
 	ready = false;
 
 	if (!originalEffect || rejected) {return;}
@@ -239,9 +246,9 @@ export function Shutdown() {
 		verifyIdentity();
 		transfer(0x23, 16, originalEffect);
 		originalEffect = null;
-		console.log("TH80 V2 PRO 2.4 GHz: original hardware lighting restored.");
+		diagnostic("TH80 V2 PRO 2.4 GHz: original hardware lighting restored.");
 	} catch (error) {
-		console.log("TH80 V2 PRO 2.4 GHz: could not restore lighting: " + error.message);
+		diagnostic("TH80 V2 PRO 2.4 GHz: could not restore lighting: " + error.message);
 	}
 }
 
@@ -355,4 +362,9 @@ function drainResponses() {
 
 		if (device.getLastReadSize() === 0) {break;}
 	}
+}
+
+function diagnostic(message) {
+	const line = "TH80-DIAG-2G " + Date.now() + " " + message;
+	if (typeof device.log === "function") {device.log(line, {toFile: true});} else {console.log(line);}
 }
