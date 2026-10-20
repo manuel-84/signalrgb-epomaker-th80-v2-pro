@@ -8,7 +8,7 @@ They stream SignalRGB effects to the keyboard without flashing QMK or replacing 
 | --- | --- | --- |
 | USB cable | [`EPOMAKER_TH80_V2_PRO.js`](./EPOMAKER_TH80_V2_PRO.js) | Tested and confirmed in SignalRGB |
 | 2.4 GHz dongle | [`EPOMAKER_TH80_V2_PRO_Wireless.js`](./EPOMAKER_TH80_V2_PRO_Wireless.js) | Tested and confirmed in SignalRGB |
-| Bluetooth | — | No vendor RGB HID interface exposed by the tested firmware; not supported |
+| Bluetooth | — | Not supported for software RGB control; confirmed by EPOMAKER support on October 20, 2026 (see below) |
 
 ## Tested hardware
 
@@ -117,6 +117,10 @@ On this tested keyboard, switching to 2.4 GHz disconnected the USB control inter
 These are specific owner-confirmed checks, not a guarantee that every disconnect or firmware delay will recover. During a successful connection-mode handover, the releasing plugin did not restore native lighting through the other transport.
 
 ### Bluetooth investigation
+
+**Manufacturer confirmation (October 20, 2026):** in an email reply to the device owner about SignalRGB Bluetooth RGB compatibility, EPOMAKER support stated: "the TH80 V2 PRO currently does not support software connectivity over Bluetooth."
+
+Bluetooth RGB investigation is therefore closed for the current firmware unless new protocol documentation or firmware support becomes available. This limitation concerns software configuration/RGB control, not normal Bluetooth keyboard input. Use USB or the 2.4 GHz dongle for SignalRGB lighting.
 
 The connected keyboard was inspected over Bluetooth on October 16, 2026. It exposes standard keyboard, system-control, consumer-control and multi-axis HID collections, but no vendor RGB HID collection equivalent to USB `FF68` or dongle `FF60`.
 
